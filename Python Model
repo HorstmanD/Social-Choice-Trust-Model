@@ -1,5 +1,5 @@
 """
-Social choice simulation model.
+Social choice simulation model in python.
 
 To use this code simply run the function named simulation() with the desired parameters.
 Parameters are simulation(number of agents, number of candidate, voting rule, number of iterations, normal distribution
