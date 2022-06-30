@@ -1,0 +1,279 @@
+"""
+Social choice simulation model.
+
+To use this code simply run the function named simulation() with the desired parameters.
+Parameters are simulation(number of agents, number of candidate, voting rule, number of iterations, normal distribution
+coefficient)
+Voting rule options are: 'plurality', 'majority-runoff', 'anti-plurality', 'borda', 'copeland',
+'dictatorship', and 'random'.
+
+At the bottom of the page I left some code to export the data to a csv file. To use this code make sure to change
+the range of the for loop to the desired amount of iterations, change the name of the file to the desired namen,
+and fill in the right parameters for the simulation function.
+"""
+
+import csv
+import random
+
+
+def simulation(n, a, rule, i, st):
+    print("Running simulation with: " + str(n) + " agents, " + str(a) + " alternatives, " + str(
+        i) + " iterations, " + rule + " rule.")
+
+    data_list = []
+    trust_sum = 0
+
+    population = generate_population(n, a)
+
+    for agent in population:
+        trust_sum += agent.trust
+    average_trust = trust_sum / len(population)
+    data_list.append(average_trust)
+
+    for x in range(i):
+
+        winner = select_winner(population, rule, a)
+        # print("winner =")
+        # print(winner)
+        trust_sum = 0
+
+        for agent in population:
+            agent.update_trust(winner, st)
+            trust_sum += agent.trust
+            agent.update_ballot()
+
+        average_trust = trust_sum / len(population)
+        data_list.append(average_trust)
+
+        # print("avg_trust =" + str(average_trust))
+
+        # if average_trust < 0.1:
+        #    print("Simulation stopped after: " + str(x))
+        # break
+    return data_list
+
+
+def generate_population(n, a):
+    population = []
+    for x in range(n):
+        population.append(Agent(a))
+    return population
+
+
+def select_winner(population, rule, a):
+    if rule == "dictatorship":
+        return population[0].ballot
+
+    if rule == "random":
+        random_ballot = []
+        for x in range(a):
+            random_ballot.append(x + 1)
+        random.shuffle(random_ballot)
+        return random_ballot
+
+    if rule == "majority-runoff":
+        n = len(population)
+        winner = []
+
+        for i in range(a):
+            ballot_copies = []
+            for item in population:
+                ballot_copy = item.ballot.copy()
+                for x in winner:
+                    ballot_copy.remove(x)
+                ballot_copies.append(ballot_copy)
+            counts_list = []
+            for x in range(a):
+                counts_list.append(0)
+            majority_found = False
+            losers = []
+            while not majority_found:
+                for x in range(a):
+                    counts_list[x] = 0
+                for ballot in ballot_copies:
+                    counts_list[ballot[0] - 1] += 1
+
+                if max(counts_list) > n / 2:
+                    majority_found = True
+                    winner.append(counts_list.index(max(counts_list)) + 1)
+
+                else:
+                    copy_counts_list = counts_list.copy()
+
+                    for x in copy_counts_list:
+                        alternative = copy_counts_list.index(x) + 1
+                        if alternative in winner:
+                            copy_counts_list[alternative - 1] = float('inf')
+                        if alternative in losers:
+                            copy_counts_list[alternative - 1] = float('inf')
+
+                    min_value = min(copy_counts_list)
+                    loser = copy_counts_list.index(min_value) + 1
+                    losers.append(loser)
+                    for ballot in ballot_copies:
+                        ballot.remove(loser)
+
+        return winner
+
+    if rule == "plurality":
+        ballot_copies = []
+        for item in population:
+            ballot_copy = item.ballot.copy()
+            ballot_copies.append(ballot_copy)
+        counts_list = []
+        for x in range(a):
+            counts_list.append(0)
+        winner = []
+
+        for i in range(a):
+            for x in range(a):
+                counts_list[x] = 0
+            for j in ballot_copies:
+                counts_list[j[0] - 1] += 1
+            max_value = max(counts_list)
+            for ballot in ballot_copies:
+                ballot.remove(counts_list.index(max_value) + 1)
+            winner.append(counts_list.index(max_value) + 1)
+
+        return winner
+
+    if rule == "anti-plurality":
+        ballot_copies = []
+        for item in population:
+            ballot_copy = item.ballot.copy()
+            ballot_copies.append(ballot_copy)
+        winner = []
+        counts_list = []
+        for x in range(a):
+            counts_list.append(0)
+        for i in range(a):
+            for x in ballot_copies[0]:
+                counts_list[x - 1] = 0
+            for x in winner:
+                counts_list[x - 1] = float('inf')
+            for j in ballot_copies:
+                counts_list[j[len(j) - 1] - 1] += 1
+            min_value = min(counts_list)
+            for ballot in ballot_copies:
+                ballot.remove(counts_list.index(min_value) + 1)
+            winner.append(counts_list.index(min_value) + 1)
+        return winner
+
+    if rule == "borda":
+        borda_count = [0] * a
+
+        for i in population:
+            score = a - 1
+            for j in range(a - 1):
+                borda_count[i.ballot[j] - 1] = borda_count[i.ballot[j] - 1] + score
+                score = score - 1
+
+        winner = []
+        for x in range(a):
+            max_count = max(borda_count)
+            winner.append(borda_count.index(max_count) + 1)
+            borda_count[borda_count.index(max_count)] = -1
+        return winner
+
+    if rule == "copeland":
+        winner = []
+        copeland_score = []
+        for x in range(a):
+            copeland_score.append(0)
+
+        for i in range(a):
+            for j in range(a):
+                if j > i:
+                    match_score = [0, 0]
+                    for item in population:
+                        for x in item.ballot:
+                            if x == i + 1:
+                                match_score[0] += 1
+                                break
+                            if x == j + 1:
+                                match_score[1] += 1
+                                break
+                    if match_score[0] > match_score[1]:
+                        copeland_score[i] += 1
+                    elif match_score[0] == match_score[1]:
+                        copeland_score[i] += 0.5
+                        copeland_score[j] += 0.5
+                    else:
+                        copeland_score[j] += 1
+
+        for x in range(a):
+            max_value = max(copeland_score)
+            alternative_index = copeland_score.index(max_value)
+            copeland_score[alternative_index] = -1
+            winner.append(alternative_index + 1)
+
+        return winner
+    else:
+        print("Rule selection error!")
+
+
+def calculate_satisfaction(ballot, winner):
+    a = len(ballot)
+    float(a)
+    max_distance = 0
+    test_ballot = []
+    for x in range(a):
+        test_ballot.append(x + 1)
+    test_winner = test_ballot.copy()
+    test_winner.reverse()
+
+    for i in range(a):
+        for j in range(a):
+            if test_ballot[i] == test_winner[j]:
+                max_distance += (1 / (i + 1)) * abs(j - i)
+
+    distance = 0
+
+    for i in range(a):
+        for j in range(a):
+            if ballot[i] == winner[j]:
+                distance += (1 / (i + 1)) * abs(j - i)
+
+    satisfaction = 1 - (distance / max_distance)
+
+    return (2 * satisfaction) - 1
+
+
+class Agent:
+    def __init__(self, a):
+        temp = []
+        for x in range(a):
+            temp.append(x + 1)
+        random.shuffle(temp)
+        self.ballot = temp
+        self.trust = 1
+
+    def update_trust(self, winner, st):
+        self.trust = self.trust + 0.1 * (calculate_satisfaction(self.ballot, winner)) + st * (
+            random.normalvariate(0, 0.25))
+        if self.trust > 1:
+            self.trust = 1
+        if self.trust < 0:
+            self.trust = 0
+
+    def update_ballot(self):
+        temp1, temp2 = random.randint(0, len(self.ballot) - 1), random.randint(0, len(self.ballot) - 1)
+
+        self.ballot[temp1], self.ballot[temp2] = self.ballot[temp2], self.ballot[temp1]
+
+
+"""
+The code below allows you to safe the simulation data easily.
+
+Make sure to change all the right parameters, currently it will preform 10 runs of 150 iterations,
+using 1000 agents, 10 candidates, SD=0.125 and the random rule 
+"""
+
+first_line = []
+for iteration in range(100):
+    first_line.append('I_' + str(iteration))
+with open('random_test.csv', 'w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(first_line)
+    for ID in range(100):
+        writer.writerow(simulation(1000, 10, "random", 150, 0.05))
